@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 MovingBlocks
+ * Copyright 2017 MovingBlocks
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.terasology.engine.modes;
 
 import org.terasology.audio.AudioManager;
+import org.terasology.config.Config;
+import org.terasology.config.TelemetryConfig;
 import org.terasology.context.Context;
 import org.terasology.engine.ComponentSystemManager;
 import org.terasology.engine.GameEngine;
@@ -25,6 +27,8 @@ import org.terasology.engine.modes.loadProcesses.RegisterInputSystem;
 import org.terasology.entitySystem.entity.EntityRef;
 import org.terasology.entitySystem.entity.internal.EngineEntityManager;
 import org.terasology.entitySystem.event.internal.EventSystem;
+import org.terasology.identity.storageServiceClient.StorageServiceWorker;
+import org.terasology.i18n.TranslationSystem;
 import org.terasology.input.InputSystem;
 import org.terasology.input.cameraTarget.CameraTargetSystem;
 import org.terasology.logic.console.Console;
@@ -39,11 +43,18 @@ import org.terasology.rendering.nui.editor.systems.NUIEditorSystem;
 import org.terasology.rendering.nui.editor.systems.NUISkinEditorSystem;
 import org.terasology.rendering.nui.internal.CanvasRenderer;
 import org.terasology.rendering.nui.internal.NUIManagerInternal;
+import org.terasology.rendering.nui.layers.mainMenu.LaunchPopup;
 import org.terasology.rendering.nui.layers.mainMenu.MessagePopup;
+import org.terasology.telemetry.TelemetryScreen;
+import org.terasology.telemetry.TelemetryUtils;
+import org.terasology.telemetry.logstash.TelemetryLogstashAppender;
 import org.terasology.utilities.Assets;
 
 /**
  * The class implements the main game menu.
+ * <br><br>
+ *
+ * @version 0.3
  */
 public class StateMainMenu implements GameState {
     private Context context;
@@ -52,6 +63,8 @@ public class StateMainMenu implements GameState {
     private ComponentSystemManager componentSystemManager;
     private NUIManager nuiManager;
     private InputSystem inputSystem;
+    private Console console;
+    private StorageServiceWorker storageServiceWorker;
 
     private String messageOnLoad = "";
 
@@ -72,7 +85,8 @@ public class StateMainMenu implements GameState {
         entityManager = context.get(EngineEntityManager.class);
 
         eventSystem = context.get(EventSystem.class);
-        context.put(Console.class, new ConsoleImpl(context));
+        console = new ConsoleImpl(context);
+        context.put(Console.class, console);
 
         nuiManager = new NUIManagerInternal(context.get(CanvasRenderer.class), context);
         context.put(NUIManager.class, nuiManager);
@@ -111,16 +125,51 @@ public class StateMainMenu implements GameState {
 
         componentSystemManager.initialise();
 
+        storageServiceWorker = context.get(StorageServiceWorker.class);
+
         playBackgroundMusic();
 
+        //guiManager.openWindow("main");
         context.get(NUIManager.class).pushScreen("engine:mainMenuScreen");
         if (!messageOnLoad.isEmpty()) {
             nuiManager.pushScreen(MessagePopup.ASSET_URI, MessagePopup.class).setMessage("Error", messageOnLoad);
         }
+
+        // TODO: enable it when exposing the telemetry to users
+        // pushLaunchPopup();
+    }
+
+    private void pushLaunchPopup() {
+        Config config = context.get(Config.class);
+        TelemetryConfig telemetryConfig = config.getTelemetryConfig();
+        TranslationSystem translationSystem = context.get(TranslationSystem.class);
+        TelemetryLogstashAppender appender = TelemetryUtils.fetchTelemetryLogstashAppender();
+        if (!telemetryConfig.isLaunchPopupDisabled()) {
+            String telemetryTitle = translationSystem.translate("${engine:menu#telemetry-launch-popup-title}");
+            String telemetryMessage = translationSystem.translate("${engine:menu#telemetry-launch-popup-text}");
+            LaunchPopup telemetryConfirmPopup = nuiManager.pushScreen(LaunchPopup.ASSET_URI, LaunchPopup.class);
+            telemetryConfirmPopup.setMessage(telemetryTitle, telemetryMessage);
+            telemetryConfirmPopup.setYesHandler(() -> {
+                telemetryConfig.setTelemetryAndErrorReportingEnable(true);
+
+                // Enable error reporting
+                appender.start();
+            });
+            telemetryConfirmPopup.setNoHandler(() -> {
+                telemetryConfig.setTelemetryAndErrorReportingEnable(false);
+
+                // Disable error reporting
+                appender.stop();
+            });
+            telemetryConfirmPopup.setOptionButtonText(translationSystem.translate("${engine:menu#telemetry-button}"));
+            telemetryConfirmPopup.setOptionHandler(()-> {
+                nuiManager.pushScreen(TelemetryScreen.ASSET_URI, TelemetryScreen.class);
+            });
+        }
     }
 
     @Override
-    public void dispose() {
+    public void dispose(boolean shuttingDown) {
         eventSystem.process();
 
         componentSystemManager.shutdown();
@@ -131,7 +180,7 @@ public class StateMainMenu implements GameState {
     }
 
     private void playBackgroundMusic() {
-        context.get(AudioManager.class).playMusic(Assets.getMusic("engine:MenuTheme").get(), 1.0f, true, null);
+        context.get(AudioManager.class).loopMusic(Assets.getMusic("engine:MenuTheme").get());
     }
 
     private void stopBackgroundMusic() {
@@ -148,6 +197,8 @@ public class StateMainMenu implements GameState {
         updateUserInterface(delta);
 
         eventSystem.process();
+
+        storageServiceWorker.flushNotificationsToConsole(console);
     }
 
     @Override
@@ -158,6 +209,11 @@ public class StateMainMenu implements GameState {
     @Override
     public String getLoggingPhase() {
         return LoggingContext.MENU;
+    }
+
+    @Override
+    public Context getContext() {
+        return context;
     }
 
     @Override

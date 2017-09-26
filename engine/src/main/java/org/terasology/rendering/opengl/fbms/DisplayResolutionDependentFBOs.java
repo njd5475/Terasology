@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 MovingBlocks
+ * Copyright 2017 MovingBlocks
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,52 +16,51 @@
 package org.terasology.rendering.opengl.fbms;
 
 import org.lwjgl.opengl.Display;
-import org.terasology.assets.ResourceUrn;
-import org.terasology.config.Config;
 import org.terasology.config.RenderingConfig;
-import org.terasology.context.Context;
+import org.terasology.engine.SimpleUri;
 import org.terasology.rendering.opengl.AbstractFBOsManager;
-import org.terasology.rendering.opengl.DefaultDynamicFBOs;
-import static org.terasology.rendering.opengl.DefaultDynamicFBOs.FINAL;
-import static org.terasology.rendering.opengl.DefaultDynamicFBOs.READ_ONLY_GBUFFER;
-import static org.terasology.rendering.opengl.DefaultDynamicFBOs.WRITE_ONLY_GBUFFER;
 import org.terasology.rendering.opengl.FBO;
 import org.terasology.rendering.opengl.FBOConfig;
 import org.terasology.rendering.opengl.ScreenGrabber;
+import org.terasology.rendering.opengl.SwappableFBO;
+
+import static org.terasology.rendering.opengl.ScalingFactors.FULL_SCALE;
 
 /**
  * TODO: Add javadocs
  * TODO: Better naming
  */
 public class DisplayResolutionDependentFBOs extends AbstractFBOsManager {
+    public static final SimpleUri FINAL_BUFFER = new SimpleUri("engine:fbo.finalBuffer");
+
+    private SwappableFBO gBufferPair;
+
     private FBO.Dimensions fullScale;
     private RenderingConfig renderingConfig;
     private ScreenGrabber screenGrabber;
 
-    public DisplayResolutionDependentFBOs(Context context) {
-        renderingConfig = context.get(Config.class).getRendering();
-        screenGrabber = context.get(ScreenGrabber.class);
-        fullScale = new FBO.Dimensions(Display.getWidth(), Display.getHeight());
+    public DisplayResolutionDependentFBOs(RenderingConfig renderingConfig, ScreenGrabber screenGrabber) {
+        this.renderingConfig = renderingConfig;
+        this.screenGrabber = screenGrabber;
+
+        updateFullScale();
         generateDefaultFBOs();
     }
 
     private void generateDefaultFBOs() {
-        generateDefaultFBO(READ_ONLY_GBUFFER);
-        generateDefaultFBO(WRITE_ONLY_GBUFFER);
-        generateDefaultFBO(FINAL);
-    }
+        FBO gBuffer1 = generateWithDimensions(new FBOConfig(new SimpleUri("engine:fbo.gBuffer1"), FULL_SCALE, FBO.Type.HDR)
+                .useDepthBuffer().useNormalBuffer().useLightBuffer().useStencilBuffer(), fullScale);
+        FBO gBuffer2 = generateWithDimensions(new FBOConfig(new SimpleUri("engine:fbo.gBuffer2"), FULL_SCALE, FBO.Type.HDR)
+                .useDepthBuffer().useNormalBuffer().useLightBuffer().useStencilBuffer(), fullScale);
+        generateWithDimensions(new FBOConfig(FINAL_BUFFER, FULL_SCALE, FBO.Type.DEFAULT), fullScale);
 
-    private void generateDefaultFBO(DefaultDynamicFBOs defaultDynamicFBO) {
-        FBOConfig fboConfig = defaultDynamicFBO.getConfig();
-        FBO fbo = generateWithDimensions(fboConfig, fullScale.multiplyBy(fboConfig.getScale()));
-        defaultDynamicFBO.setFbo(fbo);
-        defaultDynamicFBO.setFrameBufferManager(this);
+        gBufferPair = new SwappableFBO(gBuffer1, gBuffer2);
     }
 
     @Override
     public FBO request(FBOConfig fboConfig) {
         FBO fbo;
-        ResourceUrn fboName = fboConfig.getName();
+        SimpleUri fboName = fboConfig.getName();
         if (fboConfigs.containsKey(fboName)) {
             if (!fboConfig.equals(fboConfigs.get(fboName))) {
                 throw new IllegalArgumentException("Requested FBO is already available with different configuration");
@@ -93,40 +92,31 @@ public class DisplayResolutionDependentFBOs extends AbstractFBOsManager {
      */
     public void update() {
         updateFullScale();
-        if (READ_ONLY_GBUFFER.getFbo().dimensions().areDifferentFrom(fullScale)) {
-            disposeAllFBOs();
-            createFBOs();
-            updateDefaultFBOs();
+
+        FBO readOnlyGBuffer = gBufferPair.getStaleFbo();
+        if (readOnlyGBuffer.dimensions().areDifferentFrom(fullScale)) {
+            regenerateFbos();
             notifySubscribers();
         }
     }
 
-    private void disposeAllFBOs() {
-        for (ResourceUrn urn : fboConfigs.keySet()) {
+    private void regenerateFbos() {
+        for (SimpleUri urn : fboConfigs.keySet()) {
+            FBOConfig fboConfig = getFboConfig(urn);
+            fboConfig.setDimensions(fullScale.multiplyBy(fboConfig.getScale()));
+            FBO.recreate(get(urn), getFboConfig(urn));
+        }
+   }
+
+    private void disposeAllFbos() {
+        // TODO: This should be public, and should be called while disposing an object of this class, to prevent leaks.
+        for (SimpleUri urn : fboConfigs.keySet()) {
             fboLookup.get(urn).dispose();
         }
         fboLookup.clear();
     }
 
-    private void createFBOs() {
-        for (FBOConfig fboConfig : fboConfigs.values()) {
-            generateWithDimensions(fboConfig, fullScale.multiplyBy(fboConfig.getScale()));
-        }
-    }
-
-    private void updateDefaultFBOs() {
-        READ_ONLY_GBUFFER.setFbo(fboLookup.get(READ_ONLY_GBUFFER.getName()));
-        WRITE_ONLY_GBUFFER.setFbo(fboLookup.get(WRITE_ONLY_GBUFFER.getName()));
-        FINAL.setFbo(fboLookup.get(FINAL.getName()));
-    }
-
-    // TODO: Pairing FBOs for swapping functionality
-    public void swapReadWriteBuffers() {
-        FBO fbo = READ_ONLY_GBUFFER.getFbo();
-        READ_ONLY_GBUFFER.setFbo(WRITE_ONLY_GBUFFER.getFbo());
-        WRITE_ONLY_GBUFFER.setFbo(fbo);
-        fboLookup.put(READ_ONLY_GBUFFER.getName(), READ_ONLY_GBUFFER.getFbo());
-        fboLookup.put(WRITE_ONLY_GBUFFER.getName(), WRITE_ONLY_GBUFFER.getFbo());
-        notifySubscribers();
+    public SwappableFBO getGBufferPair() {
+        return gBufferPair;
     }
 }

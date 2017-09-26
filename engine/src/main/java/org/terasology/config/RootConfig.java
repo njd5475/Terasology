@@ -39,6 +39,9 @@ public final class RootConfig {
     private NetworkConfig network = new NetworkConfig();
     private SecurityConfig security = new SecurityConfig();
     private NUIEditorConfig nuiEditor = new NUIEditorConfig();
+    private SelectModulesConfig selectModulesConfig = new SelectModulesConfig();
+    private IdentityStorageServiceConfig identityStorageService = new IdentityStorageServiceConfig();
+    private TelemetryConfig telemetryConfig = new TelemetryConfig();
 
     /**
      * Create a new, empty config
@@ -89,8 +92,20 @@ public final class RootConfig {
         return security;
     }
 
+    public SelectModulesConfig getSelectModulesConfig() {
+        return selectModulesConfig;
+    }
+
     public NUIEditorConfig getNuiEditor() {
         return nuiEditor;
+    }
+
+    public IdentityStorageServiceConfig getIdentityStorageService() {
+        return identityStorageService;
+    }
+
+    public TelemetryConfig getTelemetryConfig() {
+        return telemetryConfig;
     }
 
     public Map<SimpleUri, Map<String, JsonElement>> getModuleConfigs() {

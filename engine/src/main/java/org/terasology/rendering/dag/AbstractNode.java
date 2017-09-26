@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 MovingBlocks
+ * Copyright 2017 MovingBlocks
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.terasology.assets.ResourceUrn;
+import org.terasology.engine.SimpleUri;
 import org.terasology.rendering.assets.material.Material;
 import org.terasology.rendering.opengl.BaseFBOsManager;
 import org.terasology.rendering.opengl.FBO;
@@ -35,29 +36,29 @@ import org.terasology.utilities.Assets;
 public abstract class AbstractNode implements Node {
     protected static final Logger logger = LoggerFactory.getLogger(AbstractNode.class);
 
+    private SimpleUri nodeUri;
+
     private Set<StateChange> desiredStateChanges = Sets.newLinkedHashSet();
-    private Set<StateChange> desiredStateResets = Sets.newLinkedHashSet();
-    private Map<ResourceUrn, BaseFBOsManager> fboUsages = Maps.newHashMap();
-    private NodeTask task;
+    private Map<SimpleUri, BaseFBOsManager> fboUsages = Maps.newHashMap();
     private boolean enabled = true;
 
-    protected FBO requiresFBO(FBOConfig fboConfig, BaseFBOsManager frameBuffersManager) {
-        ResourceUrn fboName = fboConfig.getName();
+    protected FBO requiresFBO(FBOConfig fboConfig, BaseFBOsManager fboManager) {
+        SimpleUri fboName = fboConfig.getName();
 
         if (!fboUsages.containsKey(fboName)) {
-            fboUsages.put(fboName, frameBuffersManager);
+            fboUsages.put(fboName, fboManager);
         } else {
             logger.warn("FBO " + fboName + " is already requested.");
-            return frameBuffersManager.get(fboName);
+            return fboManager.get(fboName);
         }
 
-        return frameBuffersManager.request(fboConfig);
+        return fboManager.request(fboConfig);
     }
 
     @Override
     public void dispose() {
-        for (Map.Entry<ResourceUrn, BaseFBOsManager> entry : fboUsages.entrySet()) {
-            ResourceUrn fboName = entry.getKey();
+        for (Map.Entry<SimpleUri, BaseFBOsManager> entry : fboUsages.entrySet()) {
+            SimpleUri fboName = entry.getKey();
             BaseFBOsManager baseFBOsManager = entry.getValue();
             baseFBOsManager.release(fboName);
         }
@@ -71,26 +72,14 @@ public abstract class AbstractNode implements Node {
                     stateChange.getClass().getSimpleName(), this.toString());
         }
         desiredStateChanges.add(stateChange);
-        desiredStateResets.add(stateChange.getDefaultInstance());
     }
 
     protected void removeDesiredStateChange(StateChange stateChange) {
         desiredStateChanges.remove(stateChange);
-        desiredStateResets.remove(stateChange.getDefaultInstance());
     }
 
     public Set<StateChange> getDesiredStateChanges() {
         return desiredStateChanges;
-    }
-    public Set<StateChange> getDesiredStateResets() {
-        return desiredStateResets;
-    }
-
-    public RenderPipelineTask generateTask() {
-        if (task == null) {
-            task = new NodeTask(this);
-        }
-        return task;
     }
 
     @Override
@@ -107,6 +96,19 @@ public abstract class AbstractNode implements Node {
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
     }
+
+    @Override
+    public void setUri(SimpleUri nodeUri) {
+        this.nodeUri = nodeUri;
+    }
+
+    @Override
+    public SimpleUri getUri() {
+        return nodeUri;
+    }
+
+    @Override
+    public void handleCommand(String command, String... arguments) { }
 
     /**
      * Utility method to conveniently retrieve materials from the Assets system,

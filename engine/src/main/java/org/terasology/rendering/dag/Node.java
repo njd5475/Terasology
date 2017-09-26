@@ -17,27 +17,26 @@ package org.terasology.rendering.dag;
 
 //TODO: consider removing the word "Node" from the name of all Node implementations now that they are in the dag.nodes package.
 
+import org.terasology.engine.SimpleUri;
+
 import java.util.Set;
 
 /**
  * TODO: Add javadocs
  */
-public interface Node {
-
-    void initialise();
-
-    void process();
-
+public interface Node extends RenderPipelineTask {
     // TODO: invoked when Node is removed from RenderGraph
     void dispose();
 
     Set<StateChange> getDesiredStateChanges();
-    Set<StateChange> getDesiredStateResets();
-
-    RenderPipelineTask generateTask();
 
     boolean isEnabled();
 
     void setEnabled(boolean enabled);
 
+    void setUri(SimpleUri nodeUri);
+
+    SimpleUri getUri();
+
+    void handleCommand(String command, String... arguments);
 }

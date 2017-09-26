@@ -16,29 +16,32 @@
 package org.terasology.rendering.dag.stateChanges;
 
 import com.google.common.base.Objects;
+import org.terasology.assets.ResourceUrn;
+import org.terasology.registry.CoreRegistry;
+import org.terasology.rendering.ShaderManager;
 import org.terasology.rendering.assets.material.Material;
-import org.terasology.rendering.dag.RenderPipelineTask;
 import org.terasology.rendering.dag.StateChange;
-import org.terasology.rendering.dag.tasks.DisableMaterialTask;
-import org.terasology.rendering.dag.tasks.EnableMaterialTask;
-import org.terasology.utilities.Assets;
+
+import static org.terasology.rendering.dag.AbstractNode.getMaterial;
 
 /**
  * TODO: Add javadocs
  */
 public final class EnableMaterial implements StateChange {
-    private static final String DEFAULT_MATERIAL_NAME = "DEFAULT";
-    private static EnableMaterial defaultInstance = new EnableMaterial(DEFAULT_MATERIAL_NAME);
+    private static StateChange defaultInstance = new DisableMaterial();
 
-    private RenderPipelineTask task;
-    private String materialName;
+    private ResourceUrn materialUrn;
+    private Material material;
 
-    public EnableMaterial(String materialName) {
-        this.materialName = materialName;
-    }
-
-    public String getMaterialName() {
-        return materialName;
+    /**
+     * The constructor, to be used in the initialise method of a node.
+     *
+     * Sample use:
+     *      addDesiredStateChange(new EnableMaterial("engine:prog.chunk"));
+     */
+    public EnableMaterial(ResourceUrn materialUrn) {
+        this.materialUrn = materialUrn;
+        this.material = getMaterial(materialUrn);
     }
 
     @Override
@@ -47,40 +50,47 @@ public final class EnableMaterial implements StateChange {
     }
 
     @Override
-    public RenderPipelineTask generateTask() {
-        if (task == null) {
-            if (materialName.equals(DEFAULT_MATERIAL_NAME)) {
-                task = new DisableMaterialTask();
-            } else {
-                Material shader = getMaterial(materialName);
-                task = new EnableMaterialTask(shader, materialName);
-            }
-        }
-        return task;
-    }
-
-    @Override
     public int hashCode() {
-        return Objects.hashCode(materialName);
+        return Objects.hashCode(materialUrn);
     }
 
     @Override
     public boolean equals(Object obj) {
-        return (obj instanceof EnableMaterial) && materialName.equals(((EnableMaterial) obj).getMaterialName());
-    }
-
-    @Override
-    public boolean isTheDefaultInstance() {
-        return this.equals(defaultInstance);
-    }
-
-    private static Material getMaterial(String assetId) {
-        return Assets.getMaterial(assetId).orElseThrow(() ->
-                new RuntimeException("Failed to resolve required asset: '" + assetId + "'"));
+        return (obj instanceof EnableMaterial) && materialUrn.equals(((EnableMaterial) obj).materialUrn);
     }
 
     @Override
     public String toString() {
-        return String.format("%30s: %s", this.getClass().getSimpleName(), materialName);
+        return String.format("%30s: %s", this.getClass().getSimpleName(), materialUrn.toString());
+    }
+
+    @Override
+    public void process() {
+        material.enable();
+    }
+
+    private static final class DisableMaterial implements StateChange {
+        // TODO: Switch from CoreRegistry to Context
+        private ShaderManager shaderManager = CoreRegistry.get(ShaderManager.class);
+
+        @Override
+        public StateChange getDefaultInstance() {
+            return this;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return (obj instanceof DisableMaterial);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%30s", this.getClass().getSimpleName());
+        }
+
+        @Override
+        public void process() {
+            shaderManager.disableShader();
+        }
     }
 }

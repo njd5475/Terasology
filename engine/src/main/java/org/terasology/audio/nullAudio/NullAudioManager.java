@@ -126,4 +126,11 @@ public class NullAudioManager implements AudioManager {
         return NullStreamingSound::new;
     }
 
+    @Override
+    public void loopMusic(StreamingSound music) {
+    }
+
+    @Override
+    public void loopMusic(StreamingSound music, float volume) {
+    }
 }
