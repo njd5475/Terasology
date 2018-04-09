@@ -156,12 +156,6 @@ public abstract class Camera {
         prevViewProjectionMatrix.set(viewProjectionMatrix);
     }
 
-    public float getClipHeight() {
-        // msteiger: I believe the offset results from the
-        // slightly lowered water surface height.
-        return reflectionHeight - 0.5f;
-    }
-
     public Matrix4f getViewMatrix() {
         if (!reflected) {
             return viewMatrix;
@@ -211,7 +205,7 @@ public abstract class Camera {
      * @return the orientation direction, a quaternion.
      */
     public Quat4f getOrientation() {
-        return new Quat4f(viewingDirection,viewingAngle);
+        return new Quat4f(viewingDirection, viewingAngle);
     }
 
     /**

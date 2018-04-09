@@ -759,7 +759,7 @@ public class NetworkSystemImpl implements EntityChangeSubscriber, NetworkSystem 
      * @param context
      */
     @Override
-    public void setStateContext(Context context) {
+    public void setContext(Context context) {
         this.context = context;
     }
 
@@ -847,7 +847,7 @@ public class NetworkSystemImpl implements EntityChangeSubscriber, NetworkSystem 
         }
         WorldGenerator worldGen = context.get(WorldGenerator.class);
         if (worldGen != null) {
-            serverInfoMessageBuilder.setReflectionHeight(worldGen.getWorld().getSeaLevel());
+            serverInfoMessageBuilder.setReflectionHeight(worldGen.getWorld().getSeaLevel() + 0.5f);
         }
         for (Module module : CoreRegistry.get(ModuleManager.class).getEnvironment()) {
             if (!StandardModuleExtension.isServerSideOnly(module)) {

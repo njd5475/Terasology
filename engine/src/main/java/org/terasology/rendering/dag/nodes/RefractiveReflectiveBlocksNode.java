@@ -36,7 +36,6 @@ import org.terasology.rendering.dag.stateChanges.SetInputTextureFromFbo;
 import org.terasology.rendering.nui.properties.Range;
 import org.terasology.rendering.opengl.FBO;
 import org.terasology.rendering.opengl.FBOConfig;
-import org.terasology.rendering.opengl.FBOManagerSubscriber;
 import org.terasology.rendering.opengl.fbms.DisplayResolutionDependentFBOs;
 import org.terasology.rendering.primitives.ChunkMesh;
 import org.terasology.rendering.world.RenderQueuesHelper;
@@ -50,6 +49,8 @@ import java.beans.PropertyChangeListener;
 import static org.terasology.rendering.dag.nodes.BackdropReflectionNode.REFLECTED_FBO_URI;
 import static org.terasology.rendering.dag.stateChanges.SetInputTextureFromFbo.FboTexturesTypes.ColorTexture;
 import static org.terasology.rendering.opengl.ScalingFactors.FULL_SCALE;
+import static org.terasology.rendering.opengl.fbms.DisplayResolutionDependentFBOs.POST_FBO_REGENERATION;
+import static org.terasology.rendering.opengl.fbms.DisplayResolutionDependentFBOs.PRE_FBO_REGENERATION;
 import static org.terasology.rendering.primitives.ChunkMesh.RenderPhase.REFRACTIVE;
 
 /**
@@ -67,29 +68,8 @@ import static org.terasology.rendering.primitives.ChunkMesh.RenderPhase.REFRACTI
  * an experimental feature. It produces initially appealing reflections but rotating the
  * camera partially spoils the effect showing its limits.
  */
-public class RefractiveReflectiveBlocksNode extends AbstractNode implements FBOManagerSubscriber, PropertyChangeListener {
+public class RefractiveReflectiveBlocksNode extends AbstractNode implements PropertyChangeListener {
     public static final SimpleUri REFRACTIVE_REFLECTIVE_FBO_URI = new SimpleUri("engine:fbo.sceneReflectiveRefractive");
-    private static final ResourceUrn CHUNK_MATERIAL_URN = new ResourceUrn("engine:prog.chunk");
-
-    private RenderQueuesHelper renderQueues;
-    private WorldRenderer worldRenderer;
-    private BackdropProvider backdropProvider;
-    private RenderingConfig renderingConfig;
-    private WorldProvider worldProvider;
-
-    private Material chunkMaterial;
-
-    private FBO lastUpdatedGBuffer;
-    private FBO refractiveReflectiveFbo;
-
-    private SubmersibleCamera activeCamera;
-
-    private boolean normalMappingIsEnabled;
-    private boolean parallaxMappingIsEnabled;
-    private boolean animatedWaterIsEnabled;
-
-    private StateChange setTerrainNormalsInputTexture;
-    private StateChange setTerrainHeightInputTexture;
 
     // TODO: rename to more meaningful/precise variable names, like waveAmplitude or waveHeight.
     @SuppressWarnings("FieldCanBeLocal")
@@ -113,6 +93,28 @@ public class RefractiveReflectiveBlocksNode extends AbstractNode implements FBOM
     @SuppressWarnings("FieldCanBeLocal")
     @Range(min = 0.0f, max = 5.0f)
     public static float waterOffsetY;
+
+    private static final ResourceUrn CHUNK_MATERIAL_URN = new ResourceUrn("engine:prog.chunk");
+    
+    private RenderQueuesHelper renderQueues;
+    private WorldRenderer worldRenderer;
+    private BackdropProvider backdropProvider;
+    private RenderingConfig renderingConfig;
+    private WorldProvider worldProvider;
+
+    private Material chunkMaterial;
+
+    private FBO lastUpdatedGBuffer;
+    private FBO refractiveReflectiveFbo;
+
+    private SubmersibleCamera activeCamera;
+
+    private boolean normalMappingIsEnabled;
+    private boolean parallaxMappingIsEnabled;
+    private boolean animatedWaterIsEnabled;
+
+    private StateChange setTerrainNormalsInputTexture;
+    private StateChange setTerrainHeightInputTexture;
 
     @SuppressWarnings("FieldCanBeLocal")
     @Range(min = 0.0f, max = 2.0f)
@@ -143,6 +145,9 @@ public class RefractiveReflectiveBlocksNode extends AbstractNode implements FBOM
     @Range(min = 0.0f, max = 0.50f)
     private float parallaxScale = 0.05f;
 
+    @SuppressWarnings("FieldCanBeLocal")
+    private Vector3f sunDirection;
+
     public RefractiveReflectiveBlocksNode(Context context) {
         renderQueues = context.get(RenderQueuesHelper.class);
         backdropProvider = context.get(BackdropProvider.class);
@@ -156,8 +161,9 @@ public class RefractiveReflectiveBlocksNode extends AbstractNode implements FBOM
         lastUpdatedGBuffer = displayResolutionDependentFBOs.getGBufferPair().getLastUpdatedFbo();
         refractiveReflectiveFbo = requiresFBO(new FBOConfig(REFRACTIVE_REFLECTIVE_FBO_URI, FULL_SCALE, FBO.Type.HDR).useNormalBuffer(), displayResolutionDependentFBOs);
         addDesiredStateChange(new BindFbo(refractiveReflectiveFbo));
-        update();
-        displayResolutionDependentFBOs.subscribe(this);
+        lastUpdatedGBuffer.attachDepthBufferTo(refractiveReflectiveFbo);
+        displayResolutionDependentFBOs.subscribe(PRE_FBO_REGENERATION, this);
+        displayResolutionDependentFBOs.subscribe(POST_FBO_REGENERATION, this);
 
         addDesiredStateChange(new EnableMaterial(CHUNK_MATERIAL_URN));
 
@@ -203,15 +209,18 @@ public class RefractiveReflectiveBlocksNode extends AbstractNode implements FBOM
      */
     @Override
     public void process() {
-        PerformanceMonitor.startActivity("rendering/RefractiveReflectiveBlocks");
+        PerformanceMonitor.startActivity("rendering/" + getUri());
 
         chunkMaterial.activateFeature(ShaderProgramFeature.FEATURE_REFRACTIVE_PASS);
 
         // Common Shader Parameters
 
+        sunDirection = backdropProvider.getSunDirection(false);
+
         chunkMaterial.setFloat("daylight", backdropProvider.getDaylight(), true);
         chunkMaterial.setFloat("swimming", activeCamera.isUnderWater() ? 1.0f : 0.0f, true);
         chunkMaterial.setFloat("time", worldProvider.getTime().getDays(), true);
+        chunkMaterial.setFloat3("sunVec", sunDirection, true);
 
         // Specific Shader Parameters
 
@@ -278,38 +287,50 @@ public class RefractiveReflectiveBlocksNode extends AbstractNode implements FBOM
     }
 
     @Override
-    public void update() {
-        lastUpdatedGBuffer.attachDepthBufferTo(refractiveReflectiveFbo);
-    }
-
-    @Override
     public void propertyChange(PropertyChangeEvent event) {
-        // This method is only called when oldValue != newValue.
-        if (event.getPropertyName().equals(RenderingConfig.NORMAL_MAPPING)) {
-            normalMappingIsEnabled = renderingConfig.isNormalMapping();
-            if (normalMappingIsEnabled) {
-                addDesiredStateChange(setTerrainNormalsInputTexture);
-                if (parallaxMappingIsEnabled) {
-                    addDesiredStateChange(setTerrainHeightInputTexture);
-                }
-            } else {
-                removeDesiredStateChange(setTerrainNormalsInputTexture);
-                if (parallaxMappingIsEnabled) {
-                    removeDesiredStateChange(setTerrainHeightInputTexture);
-                }
-            }
-        } else if (event.getPropertyName().equals(RenderingConfig.PARALLAX_MAPPING)) {
-            parallaxMappingIsEnabled = renderingConfig.isParallaxMapping();
-            if (normalMappingIsEnabled) {
-                if (parallaxMappingIsEnabled) {
-                    addDesiredStateChange(setTerrainHeightInputTexture);
+        String propertyName = event.getPropertyName();
+
+        switch (propertyName) {
+            case PRE_FBO_REGENERATION:
+                refractiveReflectiveFbo.detachDepthBuffer();
+                return;
+
+            case POST_FBO_REGENERATION:
+                lastUpdatedGBuffer.attachDepthBufferTo(refractiveReflectiveFbo);
+                return;
+
+            case RenderingConfig.NORMAL_MAPPING:
+                normalMappingIsEnabled = renderingConfig.isNormalMapping();
+                if (normalMappingIsEnabled) {
+                    addDesiredStateChange(setTerrainNormalsInputTexture);
+                    if (parallaxMappingIsEnabled) {
+                        addDesiredStateChange(setTerrainHeightInputTexture);
+                    }
                 } else {
-                    removeDesiredStateChange(setTerrainHeightInputTexture);
+                    removeDesiredStateChange(setTerrainNormalsInputTexture);
+                    if (parallaxMappingIsEnabled) {
+                        removeDesiredStateChange(setTerrainHeightInputTexture);
+                    }
                 }
-            }
-        } else if (event.getPropertyName().equals(RenderingConfig.ANIMATE_WATER)) {
-            animatedWaterIsEnabled = renderingConfig.isAnimateWater();
-        } // else: no other cases are possible - see subscribe operations in initialize().
+                break;
+
+            case RenderingConfig.PARALLAX_MAPPING:
+                if (normalMappingIsEnabled) {
+                    parallaxMappingIsEnabled = renderingConfig.isParallaxMapping();
+                    if (parallaxMappingIsEnabled) {
+                        addDesiredStateChange(setTerrainHeightInputTexture);
+                    } else {
+                        removeDesiredStateChange(setTerrainHeightInputTexture);
+                    }
+                }
+                break;
+
+            case RenderingConfig.ANIMATE_WATER:
+                animatedWaterIsEnabled = renderingConfig.isAnimateWater();
+                break;
+
+            // default: no other cases are possible - see subscribe operations in initialize().
+        }
 
         worldRenderer.requestTaskListRefresh();
     }

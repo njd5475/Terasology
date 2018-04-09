@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 MovingBlocks
+ * Copyright 2017 MovingBlocks
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,8 +33,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.Objects;
 
-/**
- */
 public class ScrollableArea extends CoreLayout {
     private static final int SCROLL_MULTIPLIER = -42;
 
@@ -47,6 +45,10 @@ public class ScrollableArea extends CoreLayout {
     private boolean verticalScrollbar = true;
     @LayoutConfig
     private boolean horizontalScrollbar;
+    @LayoutConfig
+    private Integer preferredWidth;
+    @LayoutConfig
+    private Integer preferredHeight;
 
     private UIScrollbar verticalBar = new UIScrollbar(true);
     private UIScrollbar horizontalBar = new UIScrollbar(false);
@@ -176,9 +178,20 @@ public class ScrollableArea extends CoreLayout {
         this.content = widget;
     }
 
+    /**
+     * Allows setting the preferred size directly via code instead of solely in a .ui file.
+     * @param width the preferred width to set
+     * @param height the preferred height to set
+     */
+    public void setPreferredSize (int width, int height) {
+        preferredWidth = width;
+        preferredHeight = height;
+    }
+
     @Override
     public Vector2i getPreferredContentSize(Canvas canvas, Vector2i sizeHint) {
-        return canvas.calculatePreferredSize(content);
+        Vector2i pf = canvas.calculatePreferredSize(content);
+        return  new Vector2i(preferredWidth == null ? pf.x : preferredWidth, preferredHeight == null ? pf.y : preferredHeight);
     }
 
     @Override

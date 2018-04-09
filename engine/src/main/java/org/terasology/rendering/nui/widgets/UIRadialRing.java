@@ -17,9 +17,7 @@ package org.terasology.rendering.nui.widgets;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.terasology.assets.Asset;
 import org.terasology.math.geom.Rect2i;
-import org.terasology.math.geom.Vector2d;
 import org.terasology.math.geom.Vector2i;
 import org.terasology.rendering.nui.BaseInteractionListener;
 import org.terasology.rendering.nui.Canvas;
@@ -29,7 +27,9 @@ import org.terasology.rendering.nui.events.NUIMouseClickEvent;
 import org.terasology.rendering.nui.events.NUIMouseDragEvent;
 import org.terasology.rendering.nui.events.NUIMouseOverEvent;
 import org.terasology.rendering.nui.events.NUIMouseReleaseEvent;
-import org.terasology.utilities.Assets;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A radial menu widget
@@ -37,7 +37,11 @@ import org.terasology.utilities.Assets;
 public class UIRadialRing extends CoreWidget {
 
     @LayoutConfig
-    private UIRadialSection[] sections = {};
+    private List<UIRadialSection> sections = new ArrayList<>();
+
+    public int getSelectedTab() {
+        return selectedTab;
+    }
 
     private int selectedTab = -1;
     private boolean hasInitialised;
@@ -49,11 +53,11 @@ public class UIRadialRing extends CoreWidget {
         public void onMouseOver(NUIMouseOverEvent event) {
             int sectionOver = getSectionOver(event.getRelativeMousePosition());
             if (selectedTab != -1) {
-                sections[selectedTab].setSelected(false);
+                sections.get(selectedTab).setSelected(false);
             }
 
             if (sectionOver != -1) {
-                sections[sectionOver].setSelected(true);
+                sections.get(sectionOver).setSelected(true);
             }
             selectedTab = sectionOver;
         }
@@ -70,8 +74,8 @@ public class UIRadialRing extends CoreWidget {
         @Override
         public void onMouseRelease(NUIMouseReleaseEvent event) {
             if (selectedTab != -1) {
-                sections[selectedTab].setSelected(false);
-                sections[selectedTab].activateSection();
+                sections.get(selectedTab).setSelected(false);
+                sections.get(selectedTab).activateSection();
                 selectedTab = -1;
             }
         }
@@ -90,31 +94,31 @@ public class UIRadialRing extends CoreWidget {
     }
 
     private void initialise(Canvas canvas) {
-        final double CIRCLE_TO_SQUARE = 0.707106781;
+        final double circleToSquare = 0.707106781;
         Rect2i region = canvas.getRegion();
 
         int sectionWidth = region.width() / 4;
         double offset = sectionWidth * 1.5;
         radius = sectionWidth * 2;
-        sectionAngle = (Math.PI * 2) / sections.length;
-        int infoSquareSize = (int) (radius * CIRCLE_TO_SQUARE);
-        int sectionSquareSize = (int) (sectionWidth * CIRCLE_TO_SQUARE);
+        sectionAngle = (Math.PI * 2) / sections.size();
+        int infoSquareSize = (int) (radius * circleToSquare);
+        int sectionSquareSize = (int) (sectionWidth * circleToSquare);
         Rect2i infoRegion = Rect2i.createFromMinAndSize(
                 sectionWidth + infoSquareSize / 4,
                 sectionWidth + infoSquareSize / 4,
                 infoSquareSize,
                 infoSquareSize);
 
-        for (int i = 0; i < sections.length; i++) {
-            sections[i].setDrawRegion(Rect2i.createFromMinAndSize(
+        for (int i = 0; i < sections.size(); i++) {
+            sections.get(i).setDrawRegion(Rect2i.createFromMinAndSize(
                     (int) (Math.cos(i * sectionAngle + sectionAngle / 2) * offset + sectionWidth * 1.5),
                     (int) (Math.sin(i * sectionAngle + sectionAngle / 2) * offset + sectionWidth * 1.5),
                     sectionWidth, sectionWidth));
-            sections[i].setInnerRegion(Rect2i.createFromMinAndSize(
+            sections.get(i).setInnerRegion(Rect2i.createFromMinAndSize(
                     (int) (Math.cos(i * sectionAngle + sectionAngle / 2) * offset + sectionWidth * 1.5 + sectionSquareSize / 4),
                     (int) (Math.sin(i * sectionAngle + sectionAngle / 2) * offset + sectionWidth * 1.5 + sectionSquareSize / 4),
                     sectionSquareSize, sectionSquareSize));
-            sections[i].setInfoRegion(infoRegion);
+            sections.get(i).setInfoRegion(infoRegion);
         }
     }
 
@@ -125,9 +129,28 @@ public class UIRadialRing extends CoreWidget {
      * @param listener   The listener to attach
      */
     public void subscribe(int sectionNum, ActivateEventListener listener) {
-        if (sectionNum >= 0 && sectionNum < sections.length) {
-            sections[sectionNum].addListener(listener);
+        if (sectionNum >= 0 && sectionNum < sections.size()) {
+            sections.get(sectionNum).addListener(listener);
         }
+    }
+
+    public int addSection(UIRadialSection section) {
+        sections.add(section);
+        hasInitialised = false;
+        return sections.size()-1;
+    }
+
+    public UIRadialSection getSection(int index) {
+        return sections.get(index);
+    }
+
+    public void setSections(List<UIRadialSection> sections) {
+        this.sections = sections;
+        hasInitialised = false;
+    }
+
+    public List<UIRadialSection> getSections() {
+        return sections;
     }
 
     /**
@@ -137,8 +160,8 @@ public class UIRadialRing extends CoreWidget {
      * @param listener   The listener to unsubscribe
      */
     public void unsubscribe(int sectionNum, ActivateEventListener listener) {
-        if (sectionNum >= 0 && sectionNum < sections.length) {
-            sections[sectionNum].removeListener(listener);
+        if (sectionNum >= 0 && sectionNum < sections.size()) {
+            sections.get(sectionNum).removeListener(listener);
         }
     }
 

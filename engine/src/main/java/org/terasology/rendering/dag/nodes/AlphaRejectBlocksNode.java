@@ -88,13 +88,13 @@ public class AlphaRejectBlocksNode extends AbstractNode implements WireframeCapa
         renderQueues = context.get(RenderQueuesHelper.class);
         worldProvider = context.get(WorldProvider.class);
 
-        wireframeStateChange = new SetWireframe(true);
-        RenderingDebugConfig renderingDebugConfig =  context.get(Config.class).getRendering().getDebug();
-        new WireframeTrigger(renderingDebugConfig, this);
-
         worldRenderer = context.get(WorldRenderer.class);
         activeCamera = worldRenderer.getActiveCamera();
         addDesiredStateChange(new LookThrough(activeCamera));
+
+        wireframeStateChange = new SetWireframe(true);
+        RenderingDebugConfig renderingDebugConfig =  context.get(Config.class).getRendering().getDebug();
+        new WireframeTrigger(renderingDebugConfig, this);
 
         addDesiredStateChange(new BindFbo(context.get(DisplayResolutionDependentFBOs.class).getGBufferPair().getLastUpdatedFbo()));
 
@@ -151,7 +151,7 @@ public class AlphaRejectBlocksNode extends AbstractNode implements WireframeCapa
      */
     @Override
     public void process() {
-        PerformanceMonitor.startActivity("rendering/chunksAlphaReject");
+        PerformanceMonitor.startActivity("rendering/" + getUri());
 
         chunkMaterial.activateFeature(ShaderProgramFeature.FEATURE_ALPHA_REJECT);
 
@@ -208,30 +208,36 @@ public class AlphaRejectBlocksNode extends AbstractNode implements WireframeCapa
 
     @Override
     public void propertyChange(PropertyChangeEvent event) {
-        // This method is only called when oldValue != newValue.
-        if (event.getPropertyName().equals(RenderingConfig.NORMAL_MAPPING)) {
-            normalMappingIsEnabled = renderingConfig.isNormalMapping();
-            if (normalMappingIsEnabled) {
-                addDesiredStateChange(setTerrainNormalsInputTexture);
-                if (parallaxMappingIsEnabled) {
-                    addDesiredStateChange(setTerrainHeightInputTexture);
-                }
-            } else {
-                removeDesiredStateChange(setTerrainNormalsInputTexture);
-                if (parallaxMappingIsEnabled) {
-                    removeDesiredStateChange(setTerrainHeightInputTexture);
-                }
-            }
-        } else if (event.getPropertyName().equals(RenderingConfig.PARALLAX_MAPPING)) {
-            parallaxMappingIsEnabled = renderingConfig.isParallaxMapping();
-            if (normalMappingIsEnabled) {
-                if (parallaxMappingIsEnabled) {
-                    addDesiredStateChange(setTerrainHeightInputTexture);
+        String propertyName = event.getPropertyName();
+
+        switch (propertyName) {
+            case RenderingConfig.NORMAL_MAPPING:
+                normalMappingIsEnabled = renderingConfig.isNormalMapping();
+                if (normalMappingIsEnabled) {
+                    addDesiredStateChange(setTerrainNormalsInputTexture);
+                    if (parallaxMappingIsEnabled) {
+                        addDesiredStateChange(setTerrainHeightInputTexture);
+                    }
                 } else {
-                    removeDesiredStateChange(setTerrainHeightInputTexture);
+                    removeDesiredStateChange(setTerrainNormalsInputTexture);
+                    if (parallaxMappingIsEnabled) {
+                        removeDesiredStateChange(setTerrainHeightInputTexture);
+                    }
                 }
-            }
-        } // else: no other cases are possible - see subscribe operations in initialize().
+                break;
+            case RenderingConfig.PARALLAX_MAPPING:
+                parallaxMappingIsEnabled = renderingConfig.isParallaxMapping();
+                if (normalMappingIsEnabled) {
+                    if (parallaxMappingIsEnabled) {
+                        addDesiredStateChange(setTerrainHeightInputTexture);
+                    } else {
+                        removeDesiredStateChange(setTerrainHeightInputTexture);
+                    }
+                }
+                break;
+
+            // default: no other cases are possible - see subscribe operations in initialize().
+        }
 
         worldRenderer.requestTaskListRefresh();
     }

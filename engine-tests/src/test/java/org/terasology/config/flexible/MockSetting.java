@@ -15,6 +15,7 @@
  */
 package org.terasology.config.flexible;
 
+import com.google.gson.JsonElement;
 import org.terasology.config.flexible.validators.SettingValueValidator;
 import org.terasology.engine.SimpleUri;
 
@@ -22,7 +23,7 @@ import java.beans.PropertyChangeListener;
 
 class MockSetting<T> implements Setting<T> {
     private final SimpleUri id;
-    private boolean isSubscribedTo = false;
+    private boolean isSubscribedTo;
 
     MockSetting(SimpleUri id) {
         this.id = id;
@@ -78,5 +79,13 @@ class MockSetting<T> implements Setting<T> {
     @Override
     public boolean hasSubscribers() {
         return isSubscribedTo;
+    }
+
+    @Override
+    public void setValueFromJson(String json) { }
+
+    @Override
+    public JsonElement getValueAsJson() {
+        return null;
     }
 }

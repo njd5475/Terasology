@@ -41,12 +41,10 @@ import org.terasology.rendering.opengl.FBOConfig;
 import org.terasology.rendering.opengl.fbms.DisplayResolutionDependentFBOs;
 import org.terasology.rendering.primitives.ChunkMesh;
 import org.terasology.rendering.world.RenderQueuesHelper;
-import org.terasology.rendering.world.WorldRenderer;
 import org.terasology.world.WorldProvider;
 import org.terasology.world.chunks.RenderableChunk;
 
 import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
 
 import static org.lwjgl.opengl.GL11.GL_FRONT;
 import static org.terasology.rendering.dag.nodes.BackdropReflectionNode.REFLECTED_FBO_URI;
@@ -67,11 +65,10 @@ import static org.terasology.rendering.primitives.ChunkMesh.RenderPhase.OPAQUE;
  * TODO: move diagram to the wiki when this part of the code is stable
  * - https://docs.google.com/drawings/d/1Iz7MA8Y5q7yjxxcgZW-0antv5kgx6NYkvoInielbwGU/edit?usp=sharing
  */
-public class WorldReflectionNode extends ConditionDependentNode implements PropertyChangeListener {
+public class WorldReflectionNode extends ConditionDependentNode {
     private static final ResourceUrn CHUNK_MATERIAL_URN = new ResourceUrn("engine:prog.chunk");
 
     private RenderQueuesHelper renderQueues;
-    private WorldRenderer worldRenderer;
     private BackdropProvider backdropProvider;
     private WorldProvider worldProvider;
 
@@ -109,7 +106,6 @@ public class WorldReflectionNode extends ConditionDependentNode implements Prope
         backdropProvider = context.get(BackdropProvider.class);
         worldProvider = context.get(WorldProvider.class);
 
-        worldRenderer = context.get(WorldRenderer.class);
         activeCamera = worldRenderer.getActiveCamera();
         addDesiredStateChange(new ReflectedCamera(activeCamera)); // this has to go before the LookThrough state change
         addDesiredStateChange(new LookThrough(activeCamera));
@@ -160,7 +156,7 @@ public class WorldReflectionNode extends ConditionDependentNode implements Prope
      */
     @Override
     public void process() {
-        PerformanceMonitor.startActivity("rendering/worldReflection");
+        PerformanceMonitor.startActivity("rendering/" + getUri());
 
         chunkMaterial.activateFeature(ShaderProgramFeature.FEATURE_USE_FORWARD_LIGHTING);
 
@@ -184,7 +180,7 @@ public class WorldReflectionNode extends ConditionDependentNode implements Prope
             }
         }
 
-        chunkMaterial.setFloat("clip", 0.0f, true);
+        chunkMaterial.setFloat("clip", activeCamera.getReflectionHeight(), true);
 
         // Actual Node Processing
 
@@ -218,33 +214,41 @@ public class WorldReflectionNode extends ConditionDependentNode implements Prope
 
     @Override
     public void propertyChange(PropertyChangeEvent event) {
-        // This method is only called when oldValue != newValue.
-        if (event.getPropertyName().equals(RenderingConfig.REFLECTIVE_WATER)) {
-            requiresCondition(() -> renderingConfig.isReflectiveWater());
-        } else if (event.getPropertyName().equals(RenderingConfig.NORMAL_MAPPING)) {
-            isNormalMapping = renderingConfig.isNormalMapping();
-            if (isNormalMapping) {
-                addDesiredStateChange(setNormalTerrain);
-                if (isParallaxMapping) {
-                    addDesiredStateChange(setHeightTerrain);
-                }
-            } else {
-                removeDesiredStateChange(setNormalTerrain);
-                if (isParallaxMapping) {
-                    removeDesiredStateChange(setHeightTerrain);
-                }
-            }
-        } else if (event.getPropertyName().equals(RenderingConfig.PARALLAX_MAPPING)) {
-            isParallaxMapping = renderingConfig.isParallaxMapping();
-            if (isNormalMapping) {
-                if (isParallaxMapping) {
-                    addDesiredStateChange(setHeightTerrain);
-                } else {
-                    removeDesiredStateChange(setHeightTerrain);
-                }
-            }
-        } // else: no other cases are possible - see subscribe operations in initialize().
+        String propertyName = event.getPropertyName();
 
-        worldRenderer.requestTaskListRefresh();
+        switch (propertyName) {
+            case RenderingConfig.REFLECTIVE_WATER:
+                break;
+
+            case RenderingConfig.NORMAL_MAPPING:
+                isNormalMapping = renderingConfig.isNormalMapping();
+                if (isNormalMapping) {
+                    addDesiredStateChange(setNormalTerrain);
+                    if (isParallaxMapping) {
+                        addDesiredStateChange(setHeightTerrain);
+                    }
+                } else {
+                    removeDesiredStateChange(setNormalTerrain);
+                    if (isParallaxMapping) {
+                        removeDesiredStateChange(setHeightTerrain);
+                    }
+                }
+                break;
+
+            case RenderingConfig.PARALLAX_MAPPING:
+                isParallaxMapping = renderingConfig.isParallaxMapping();
+                if (isNormalMapping) {
+                    if (isParallaxMapping) {
+                        addDesiredStateChange(setHeightTerrain);
+                    } else {
+                        removeDesiredStateChange(setHeightTerrain);
+                    }
+                }
+                break;
+
+            // default: no other cases are possible - see subscribe operations in initialize().
+        }
+
+        super.propertyChange(event);
     }
 }

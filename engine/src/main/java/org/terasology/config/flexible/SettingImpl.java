@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 MovingBlocks
+ * Copyright 2017 MovingBlocks
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,11 @@
  */
 package org.terasology.config.flexible;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.terasology.config.flexible.validators.SettingValueValidator;
@@ -33,13 +37,15 @@ import java.util.Set;
  */
 public class SettingImpl<T> implements Setting<T> {
     private static final Logger LOGGER = LoggerFactory.getLogger(SettingImpl.class);
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private final SimpleUri id;
     private final String warningFormatString;
 
     private final T defaultValue;
+    private final Class<T> valueClass;
 
-    private T value;
+    protected T value;
 
     private String humanReadableName;
 
@@ -59,54 +65,61 @@ public class SettingImpl<T> implements Setting<T> {
 
     /**
      * Creates a new {@link SettingImpl} with the given id, default value and validator.
-     *
      * @param id           the id of the setting.
      * @param defaultValue the default value of the setting.
      * @param validator    the validator to be used to validate values.
      */
+    @SuppressWarnings("unchecked")
     public SettingImpl(SimpleUri id, T defaultValue, SettingValueValidator<T> validator) {
         this.id = id;
         this.warningFormatString = MessageFormat.format("Setting {0}: '{'0}'", this.id);
 
         this.validator = validator;
 
-        if (!validate(defaultValue))
+        if (!validate(defaultValue)) {
             throw new IllegalArgumentException("The default value must be a valid value. " +
                     "Check the logs for more information.");
+        }
+
+        Preconditions.checkNotNull(defaultValue, formatWarning("The default value cannot be null."));
 
         this.defaultValue = defaultValue;
         this.value = this.defaultValue;
+        this.valueClass = (Class<T>) defaultValue.getClass();
+    }
 
-        this.subscribers = null;
+    private String formatWarning(String s) {
+        return MessageFormat.format(warningFormatString, s);
     }
 
     private void dispatchChangedEvent(PropertyChangeEvent event) {
-        for (PropertyChangeListener subscriber : subscribers) {
-            subscriber.propertyChange(event);
+        if (subscribers != null) {
+            for (PropertyChangeListener subscriber : subscribers) {
+                subscriber.propertyChange(event);
+            }
         }
     }
 
-    private boolean validate(T value) {
-        return validator == null || validator.validate(value);
+    private boolean validate(T valueToValidate) {
+        return validator == null || validator.validate(valueToValidate);
     }
 
     /**
      * {@inheritDoc}
      */
+    @Override
     public boolean subscribe(PropertyChangeListener listener) {
         if (subscribers == null) {
             subscribers = Sets.newHashSet();
         }
 
         if (listener == null) {
-            LOGGER.warn(MessageFormat.format(this.warningFormatString,
-                    "A null subscriber cannot be added"));
+            LOGGER.warn(formatWarning("A null subscriber cannot be added."));
 
             return false;
         }
         if (subscribers.contains(listener)) {
-            LOGGER.warn(MessageFormat.format(this.warningFormatString,
-                    "The listener has already been subscribed"));
+            LOGGER.warn(formatWarning("The listener has already been subscribed."));
 
             return false;
         }
@@ -119,10 +132,10 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public boolean unsubscribe(PropertyChangeListener listener) {
         if (!subscribers.contains(listener)) {
-            LOGGER.warn(MessageFormat.format(this.warningFormatString,
-                    "The listener does not exist in the subscriber list"), id);
+            LOGGER.warn(formatWarning("The listener does not exist in the subscriber list."));
             return false;
         }
 
@@ -138,6 +151,7 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public boolean hasSubscribers() {
         return subscribers != null;
     }
@@ -145,6 +159,7 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public SimpleUri getId() {
         return id;
     }
@@ -152,6 +167,7 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public SettingValueValidator<T> getValidator() {
         return validator;
     }
@@ -159,6 +175,7 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public T getDefaultValue() {
         return defaultValue;
     }
@@ -166,6 +183,7 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public T getValue() {
         return value;
     }
@@ -173,7 +191,10 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public boolean setValue(T newValue) {
+        Preconditions.checkNotNull(newValue, formatWarning("The value of a setting cannot be null."));
+
         if (!validate(newValue)) {
             return false;
         }
@@ -188,6 +209,7 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public String getHumanReadableName() {
         return humanReadableName;
     }
@@ -195,7 +217,18 @@ public class SettingImpl<T> implements Setting<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public String getDescription() {
         return description;
+    }
+
+    @Override
+    public void setValueFromJson(String json) {
+        value = GSON.fromJson(json, valueClass);
+    }
+
+    @Override
+    public JsonElement getValueAsJson() {
+        return GSON.toJsonTree(value);
     }
 }

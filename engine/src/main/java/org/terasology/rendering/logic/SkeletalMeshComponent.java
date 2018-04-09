@@ -17,7 +17,6 @@
 package org.terasology.rendering.logic;
 
 import com.google.common.collect.Lists;
-import org.terasology.entitySystem.Component;
 import org.terasology.entitySystem.Owns;
 import org.terasology.entitySystem.entity.EntityRef;
 import org.terasology.math.geom.Vector3f;
@@ -25,6 +24,7 @@ import org.terasology.network.Replicate;
 import org.terasology.rendering.assets.animation.MeshAnimation;
 import org.terasology.rendering.assets.material.Material;
 import org.terasology.rendering.assets.skeletalmesh.SkeletalMesh;
+import org.terasology.rendering.nui.Color;
 import org.terasology.rendering.nui.properties.Range;
 import org.terasology.world.block.ForceBlockActive;
 
@@ -34,7 +34,7 @@ import java.util.Map;
 /**
  */
 @ForceBlockActive
-public class SkeletalMeshComponent implements Component {
+public class SkeletalMeshComponent implements VisualComponent {
     public SkeletalMesh mesh;
     public Material material;
 
@@ -68,4 +68,7 @@ public class SkeletalMeshComponent implements Component {
 
     public Vector3f scale = new Vector3f(1, 1, 1);
     public Vector3f translate = new Vector3f();
+
+    @Replicate
+    public Color color = Color.WHITE;
 }

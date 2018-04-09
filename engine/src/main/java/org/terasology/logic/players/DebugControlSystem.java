@@ -28,34 +28,30 @@ import org.terasology.input.Keyboard;
 import org.terasology.input.binds.general.HideHUDButton;
 import org.terasology.input.events.KeyDownEvent;
 import org.terasology.input.events.KeyEvent;
-import org.terasology.input.events.MouseXAxisEvent;
-import org.terasology.input.events.MouseYAxisEvent;
+import org.terasology.input.events.MouseAxisEvent;
 import org.terasology.logic.characters.CharacterComponent;
-import org.terasology.logic.console.ConsoleMessageEvent;
 import org.terasology.logic.debug.DebugProperties;
 import org.terasology.network.ClientComponent;
 import org.terasology.registry.In;
 import org.terasology.rendering.nui.NUIManager;
 import org.terasology.rendering.nui.layers.ingame.metrics.DebugOverlay;
-import org.terasology.rendering.world.viewDistance.ViewDistance;
 import org.terasology.world.WorldProvider;
 
-/**
- */
+
 @RegisterSystem(RegisterMode.CLIENT)
 public class DebugControlSystem extends BaseComponentSystem {
 
     @In
     private WorldProvider world;
-
+    
     @In
     private Config config;
 
     @In
     private NUIManager nuiManager;
-
+    
     private DebugOverlay overlay;
-
+    
     private boolean mouseGrabbed = true;
 
     @Override
@@ -76,28 +72,13 @@ public class DebugControlSystem extends BaseComponentSystem {
         }
     }
 
-    @ReceiveEvent(components = ClientComponent.class)
-    public void onIncreaseViewDistance(IncreaseViewDistanceButton button, EntityRef entity) {
-        int viewDistance = config.getRendering().getViewDistance().getIndex();
-        int maxViewDistance = ViewDistance.values().length - 1;
 
-        if (viewDistance != maxViewDistance) {
-            config.getRendering().setViewDistance(ViewDistance.forIndex((viewDistance + 1)));
-        }
-        button.consume();
-    }
-
-    @ReceiveEvent(components = ClientComponent.class)
-    public void onDecreaseViewDistance(DecreaseViewDistanceButton button, EntityRef entity) {
-        int viewDistance = config.getRendering().getViewDistance().getIndex();
-        int minViewDistance = 0;
-
-        if (viewDistance != minViewDistance) {
-            config.getRendering().setViewDistance(ViewDistance.forIndex((viewDistance - 1)));
-        }
-        button.consume();
-    }
-
+    /**
+     * Creates illusion of time flying by if correspondig key is held down.
+     * Up / Down : Increases / Decreases time of day by 0.005 per keystroke.
+     * Right / left : Increases / Decreases time of day by 0.02 per keystroke.
+     * @param entity The player entity that triggered the time change.
+     */
     @ReceiveEvent(components = ClientComponent.class)
     public void onKeyEvent(KeyEvent event, EntityRef entity) {
         boolean debugEnabled = config.getSystem().isDebugEnabled();
@@ -172,16 +153,10 @@ public class DebugControlSystem extends BaseComponentSystem {
     }
 
     @ReceiveEvent(components = CharacterComponent.class, priority = EventPriority.PRIORITY_HIGH)
-    public void onMouseX(MouseXAxisEvent event, EntityRef entity) {
+    public void onMouseX(MouseAxisEvent event, EntityRef entity) {
         if (!mouseGrabbed) {
             event.consume();
         }
     }
 
-    @ReceiveEvent(components = CharacterComponent.class, priority = EventPriority.PRIORITY_HIGH)
-    public void onMouseY(MouseYAxisEvent event, EntityRef entity) {
-        if (!mouseGrabbed) {
-            event.consume();
-        }
-    }
 }
